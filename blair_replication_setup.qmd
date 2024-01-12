@@ -1,0 +1,37 @@
+---
+title: "Analysis Notebook for Blair Replication Exploring a Replication of Blair et al. Study"
+author: "Anna Capels"
+format: 
+  html:
+    embed-resources: true
+df-print: paged
+toc: true
+editor: source
+---
+
+#Loading packages
+
+```{r}
+library(gt)
+library(gtsummary)
+library(here) 
+library(skimr)
+library(broom)
+library(modelr)
+library(labelled)
+library(tidyverse)
+```
+
+# Import data
+
+```{r}
+df <- read_csv(here("data", "sentence.csv"))
+```
+
+# Describe variables
+
+```{r}
+df |> skim()
+tidy(df)
+```
+Years appears to have no missing values, a mean of 6.84 (units), a standard deviation of 62.50, and a range of 1 to 216 (units). Years is the sentence length in years. The variable afro also appears to have no missing values, a mean of 4.53, a sd of 1.77, and a range of 1.5 to 7.9 (units). afro was a rating for African features from inmate photos given 35 CSU undergraduate students on a 1-9 scale (9 being lots of African features). 

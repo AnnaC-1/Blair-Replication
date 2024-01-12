@@ -1,0 +1,156 @@
+---
+title: "Exploring a Replication of Blair et al. Study Pt.3: Polynomials"
+author: "Anna Capels"
+format: 
+  html:
+    embed-resources: true
+df-print: paged
+toc: true
+editor: source
+---
+
+#Loading packages
+
+```{r}
+library(gt)
+library(gtsummary)
+library(here) 
+library(skimr)
+library(broom)
+library(modelr)
+library(labelled)
+library(tidyverse)
+```
+
+# Importing data
+
+```{r}
+df <- read_csv(here("data", "sentence.csv"))
+skim(df)
+```
+
+----
+In the paper quadratic polynormal terms were included for each of the seriousness measures (primary crime(primlev), secondary crimes (seclev), and for prior crimes (priorlev)). Here we'll just focus on the relationship between primlev and log sentence length (lnyears). 
+
+# Examining the curvilinear effect of primlev on lnyears
+
+## Preparing lnyears and the polynomial term
+
+```{r}
+df <- df |> 
+  mutate(lnyears = log(years)) |> 
+  mutate(primlev2 = primlev^2)
+```
+
+## Fit the polynomial regression model - regressing lnyears on primlev and primlev2
+
+```{r}
+poly <- lm(lnyears ~ primlev + primlev2, data = df)
+poly |> tidy()
+```
+
+Understanding the basic equation of a quadratic regression model: 
+$y_{i}^{hat???} = B_{0} + (B_{1}*x_{i}) + (B_{2}*x_{i}^2)$
+
+Where $x_{i}$ is primlev and $x_{i}^2$ is primlev2. The sign of the squared term indicates whether the shape is a 'hill' or a 'bowl'. If $B_{2}$ is positive than the parabola is a 'bowl' and if negative then a 'hill' shape. Here $B_{2}$  is positive so it's a bowl.
+
+```{r}
+#Other way
+#predicted_length <- predict(poly, newdata = data.frame(primlev = 0, primlev2 = 0))
+#predicted_length
+#predicted_length <- exp(predicted_length)
+#predicted_length
+
+#Taking exp(intercept)
+exp(0.7647672)
+```
+
+2.14 is the antilog of ln(years). So it's essentially the inverse log of the intercept for the poly model giving us the predicted sentence length in years when the seriousness of the primary offense is 0. 
+
+```{r}
+#Vertex −b1÷(2*b2)
+
+vertex <-	(0.2891900	/ (2*0.0478481))
+vertex 
+```
+
+The vertex is the point at which the predicted value of Y (i.e., fitted value or y-hat) takes a maximum value if the parabola is a mound or a minimum value if the parabola is a bowl. In other words, the vertex represents the highest or lowest point on the parabola. Within this model the vertex was found to be 3.02. 
+
+Now we can move to the slope. For the sake of practice, we'll use when primlev is 3. The equation used is: 
+$B_{1} + (2*B_{2} *x)$
+
+```{r}
+primlev_6.5 <- (-0.2891900	+ (2*0.0478481*6.5)) 
+primlev_10 <- (-0.2891900	+ (2*0.0478481*10)) 
+
+primlev_6.5
+primlev_10
+```
+
+Primlev 6.5 means that when a level of 6.5 seriousness of primary offense is plugged in, it gives us a slope drawn tangent to the parabola is 0.3328. Primlev 10 means that when a level of 10 seriousness of primary offense is plugged in, it gives us a slope drawn tangent to the parabola is 0.6678. There's an overall pattern that as the seriousness of offense goes up, the effect on log sentence length goes up as well. 
+
+```{r}
+# predicting slope
+
+#Primlev 6.5 (to 7.5)
+# function
+ln.y <- function(slope, x_chg) {
+  new_slope <- 100 * (exp(slope * x_chg) - 1) 
+  return(new_slope)
+}
+# inputing slope from regression output and the desired change in x
+ln.y(slope = 0.33, x_chg = 1)
+```
+
+```{r}
+#Primlev 10 (to 11)
+# function
+ln.y <- function(slope, x_chg) {
+  new_slope <- 100 * (exp(slope * x_chg) - 1) 
+  return(new_slope)
+}
+# inputing slope from regression output and the desired change in x
+ln.y(slope = 0.667772, x_chg = 1)
+```
+
+We expect the sentence length in years to be about 95% larger (nearly a doubling) as we move from a score of 10 to 11 on primlev.
+
+## Graphing the fitted model
+
+```{r}
+# creating a data frame of desired scores for primlev
+primlev_scores <- data.frame(primlev = seq(from = 1, to = 11, by = 1))
+
+# computing squared version
+primlev_scores <-
+  primlev_scores |> 
+  mutate(primlev2 = primlev^2)
+
+# predict function 
+pred_lnyears <- predict(poly, newdata = primlev_scores)
+
+# Join together the primlev prototypical values and predicted lnyears (tibble creates a data frame from the two vectors)
+pred_df <- tibble(primlev_scores, pred_lnyears)
+
+# Exponentiate the predicted values
+pred_df <-
+  pred_df |> 
+  mutate(pred_years = exp(pred_lnyears))
+
+pred_df
+```
+
+```{r}
+pred_df |> 
+  ggplot(mapping = aes(x = primlev, y = pred_years)) +
+  geom_point() +
+  geom_line() +
+  labs(title = "Fitted Relationship Between Seriousness of Primary Offense and Sentence Length in Years",
+       x = "Seriousness of Primary Offense",
+       y = "Predicted Sentnece Length in Years") +
+  theme_minimal() +
+  scale_x_continuous(breaks = seq(1, 11, by = 1))
+```
+
+The effect of seriousness of the primary offense on sentence length appears to have a positive curvature relationship. It appears that when the X (seriousness of primary offense) increases Y (Predicted Sentence Length in Years) increases again. 
+

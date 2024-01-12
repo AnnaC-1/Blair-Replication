@@ -1,0 +1,219 @@
+---
+title: "Exploring a Replication of Blair et al. Study Pt.1: Exploring Logarithms"
+author: "Anna Capels"
+format: 
+  html:
+    embed-resources: true
+df-print: paged
+toc: true
+editor: source
+---
+
+#Loading packages
+
+```{r}
+library(gt)
+library(gtsummary)
+library(here) 
+library(skimr)
+library(broom)
+library(modelr)
+library(labelled)
+library(tidyverse)
+```
+
+# Import data
+
+```{r}
+df <- read_csv(here("data", "sentence.csv"))
+```
+
+# Describe variables
+
+```{r}
+df |> skim()
+```
+Years appears to have no missing values, a mean of 6.84 (units), a standard deviation of 62.50, and a range of 1 to 216 (units). Years is the sentence length in years. The variable afro also appears to have no missing values, a mean of 4.53, a sd of 1.77, and a range of 1.5 to 7.9 (units). afro was a rating for African features from inmate photos given 35 CSU undergraduate students on a 1-9 scale (9 being lots of African features). 
+
+# Examine the distrubution of years
+
+## The raw distribution
+
+```{r}
+df |> 
+  ggplot(mapping = aes(x = years)) +
+  geom_histogram(binwidth = 1) +
+  labs(title = "Histogram of Sentence Length in Years", 
+       x = "Sentence Length in Years") +
+  theme_bw()
+```
+
+The histogram shows an extreme right skew (positive skew) showing that a vast majority of the inmates have short sentence lengths. Short sentence lengths here are less than 25 years with most cases appearing to have a sentence length around 5-6 years (specifically an average of 6.8 years looking at the skim() output). Due to this extreme skew several assumptions can be violated such as normality of residuals, homogeneity of variance of residuals, and linearity. We will perform a log transformation to help deal with the extreme skew. 
+
+## Transforming years and creating a new histogram
+
+```{r}
+df <-
+  df |> 
+  mutate(lnyears = log(years))
+
+df |> 
+  ggplot(mapping = aes(x = lnyears)) +
+  geom_histogram(bins = 30) +
+  theme_minimal() +
+  labs(title = "Distribution of Sentence Length in ln (years)",
+       x = "Sentence Length in ln (years)")
+```
+
+Compared to the original histogram this shows a distribution that is closer to normal. Eventually, we hope to see the transformation linearizes the relationship between the predictors and outcome. 
+
+## Scatterplot of years, lnyears and afro
+
+```{r}
+# Plot 1: raw/original y
+df |> 
+  ggplot(mapping = aes(x = afro, y = years)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  theme_minimal() +
+  labs(title = "Examining the Relationship Between Afrocentric Features and Sentence Length in Years",
+       x = "Afrocentric Features" , 
+       y = "Sentence Length in Years")
+
+# Plot 2: transformed y w/ ln
+df |> 
+  ggplot(mapping = aes(x = afro, y = lnyears)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  theme_minimal() +
+  labs(title = "Examining the Relationship Between Afrocentric Features and Sentence Length in ln (years)",
+       x = "Afrocentric Features" , 
+       y = "Sentence Length in ln (years)")
+```
+As we see the second plot including lnyears is better than the first as it does a very bad job of modeling the data. The best fit line appears to do much better as it makes it more obvious that the spread above and below the vest fit line overall is even. For right now, we'll consider this linear enough to proceed. 
+
+
+## SLR: Regressing lnyears on afro
+
+```{r}
+slr1 <- lm(lnyears ~ afro, data=df)
+tidy(slr1)
+```
+
+The intercept of 0.713 is the estimated natural log of sentence length (years) when holding Afrocentric features constant at zero. The slope is that a 1 unit increase in Afrocentric features is associated with a 0.092 unit (years) increase in the estimated natural log of sentence length.   
+
+To get this estimate back to years then we take the inverse log (antilog) by exponentiating the log transformed value to the base that was used. Essentially we can raise e to the power of the transformed value with the exp(). 
+```{r}
+exp(.7135191)
+```
+
+This gives us 2.04 indicating that the predicted sentence length for an inmate with a 0 score for Afrocentric features is about 2 years. To get the slope in an easier way of comprehending it we need to interpret it in terms of a percent change in years rather than a unit change in years. Therefore we need to apply ln.y() to do a natural log transformation to the y variable, but the x variable is in its natural metric. x_chg=1 as we want the expected percent change in sentence length in years for a 1 unit increase in Afrocentric features.
+
+```{r}
+# function
+ln.y <- function(slope, x_chg) {
+  new_slope <- 100 * (exp(slope * x_chg) - 1) 
+  return(new_slope)
+}
+
+# inputting slope from regression output and the desired change in x
+ln.y(slope = 0.09156341, x_chg = 1)
+```
+Each 1-unit increase in Afrocentric features is associated with a 9.6% increase in sentence length in years. 
+
+## Practice
+Just for practice predicting the sentence length in years for 2 scores for Afrocentric features (2,3). 
+
+```{r}
+slr1 |> tidy()
+```
+
+```{r}
+# afro = 2
+lnyears_at_afro_2 = .71351909 + (0.09156341 * 2)
+lnyears_at_afro_2
+exp(lnyears_at_afro_2)
+
+# afro = 3
+lnyears_at_afro_3 = .71351909 + (0.09156341 * 3)
+lnyears_at_afro_3
+exp(lnyears_at_afro_3)
+
+# % difference
+((2.68642 - 2.451367)/2.451367)*100
+```
+Here we see that based only on this predictor an inmate with an Afrocentric features score of 2 is expected to receive a sentence length of 2.45 years and an inmate with an Afrocentric features score of 3 is expected to receive a sentence length of 2.69 years. The percent difference is 9.59 which is what we found above where in context it means that each 1-unit increase in Afrocentric features is associated with a 9.6% increase in sentence length in years.
+
+### Practice Pt. 2 - expected % cahnge in sentence length in years for a 1 standard deviation increase in afro
+```{r}
+df |> 
+  select(afro) |> 
+  summarize(mean = mean(afro), standard_deviation = sd(afro))
+```
+
+```{r}
+# function
+ln.y <- function(slope, x_chg) {
+  new_slope <- 100 * (exp(slope * x_chg) - 1) 
+  return(new_slope)
+}
+
+# inputting slope from regression output and the desired change in x
+ln.y(slope = 0.09156341, x_chg = 1.765391)
+```
+
+17.5 tells us that a 1 standard deviation increase in Y (Afrocentric features) is associated with an increase of 17.5% in X (sentence length in Years). Meaning that an inamte with more Afrocentric features is given a longer criminal sentence. 
+
+## Using predict() - Calculating predicted sentence length given Afrocentric features
+
+```{r}
+# Creating a data frame of a range of scores for afro
+afro_scores <- data.frame(afro = c(1,2,3,4,5,6,7,8))
+
+# Using predict function
+pred_lnyears <- predict(slr1, newdata = afro_scores)
+
+# Joining together the afro values and predicted lnyears
+pred_df <- tibble(afro_scores, pred_lnyears)
+
+# Exponentiating the predicted values
+pred_df <-
+  pred_df |> 
+  mutate(pred_years = exp(pred_lnyears))
+
+pred_df
+```
+
+### Plotting Afrocentric features vs predicted sentence length in ln(years) and predicted sentence length in years
+
+```{r}
+# predicted model with lnyears
+pred_df |> 
+  ggplot(mapping = aes(x = afro, y = pred_lnyears)) +
+  geom_point() +
+  geom_line() +
+  labs(title = "Fitted relationship between Afrocentric \nfeatures and ln(years)",
+       x = "Afrocentric features",
+       y = "Sentence length in ln(years)") +
+  theme_minimal()
+```
+
+The relationship between the two variables is linear here. 
+
+```{r}
+# predicted model with years
+pred_df |> 
+  ggplot(mapping = aes(x = afro, y = pred_years)) +
+  geom_point() +
+  geom_line() +
+  labs(title = "Fitted relationship between Afrocentric \nfeatures and years",
+       x = "Afrocentric features",
+       y = "Sentence length in years") +
+  theme_minimal()
+```
+    
+The relationship here is curvilinear which violates fundamental assumptions of the linear regression model. So applying a natural log transformation to 1(+) variables to be input into a regression model creating an opportunity to fit a linear regression model that meets the assumptions of linearity (at level of transformed variables). 
+
+## Take Aways: 
+It was a good choice for the paper to apply a log transformation to years as it made the data meet the assumptions of linear regression better and make the outcome easier to intuitively understand 
+

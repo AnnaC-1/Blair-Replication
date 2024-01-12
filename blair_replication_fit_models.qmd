@@ -1,0 +1,252 @@
+---
+title: "Exploring a Replication of Blair et al. Study Pt.3: Fitting Different Models"
+author: "Anna Capels"
+format: 
+  html:
+    embed-resources: true
+df-print: paged
+toc: true
+editor: source
+---
+
+#Loading packages
+
+```{r}
+library(gt)
+library(gtsummary)
+library(here) 
+library(skimr)
+library(broom)
+library(modelr)
+library(labelled)
+library(tidyverse)
+```
+
+# Importing data
+
+```{r}
+df <- read_csv(here("data", "sentence.csv"))
+```
+
+# Preparing the final data
+
+```{r}
+sentence <- df |>  
+  mutate(primlev_m = primlev - mean(primlev),
+         seclev_m = seclev - mean(seclev),
+         priorlev_m = priorlev - mean(priorlev),
+         nsecond_m = nsecond - mean(nsecond),
+         nprior_m = nprior - mean(nprior),
+         afro_m = afro - mean(afro),
+         babyface_m = babyface - mean(babyface),
+         attract_m = attract - mean(attract),
+         primlev2 = primlev_m^2,
+         seclev2 = seclev_m^2,
+         priorlev2 = priorlev_m^2,
+         lnyears = log(years),
+         black_m = case_when(black == 0 ~ -1, black == 1 ~ 1),
+         race.f = factor(case_when(black == 1 ~ "Black", black == 0 ~ "White"))) |> 
+  select(id, years, lnyears, primlev_m, primlev2, nsecond_m, seclev_m, seclev2, nprior_m, priorlev_m, priorlev2, attract_m, babyface_m, afro_m, black, black_m, race.f) |> 
+  set_variable_labels(
+    id =    "ID",   
+    years = "Sentence length in years",
+    lnyears = "Sentence length in ln(years)",
+    primlev_m   = "Seriousness of primary offense", 
+    primlev2 = "Seriousness of the primary offense squared",
+    nsecond_m = "Number of secondary offenses",
+    seclev_m = "Seriousness of secondary offense(s)",
+    seclev2 = "Seriousness of the secondary offense(s) squared",
+    nprior_m =  "Number of prior offenses", 
+    priorlev_m =    "Seriousness of prior offense(s)",
+    priorlev2 = "Seriousness of the prior offense(s) squared",
+    attract_m = "Rating for attractiveness",    
+    babyface_m = "Rating for babyface features",
+    afro_m =    "Rating for afrocentric features",  
+    black = "Indicator for Black",  
+    black_m = "Effect code for Black compared to White",
+    race.f = "Race")
+```
+
+# Obtain descriptive statistics on all key variables
+
+```{r}
+sentence |> skim()
+```
+
+# Fit the models
+
+## Model 1
+
+```{r}
+mod1 <- 
+  lm(lnyears ~ primlev_m + primlev2 + seclev_m + seclev2 + nsecond_m + priorlev_m + priorlev2 + nprior_m, 
+     data = sentence)
+
+mod1 |> tidy()
+mod1 |> glance() |> select(r.squared, sigma)
+```
+
+The model that was fit was regressing lnyears on all of the criminal record variables. The purpose of fitting it was to control for all of the factors that should lawfully predict sentnece length before looking at the effects of interest. The R^2 value is telling us that 57% of the variability (in the model) in Y (ln sentence length) can be explained by the X variables (too many to list). 
+
+## Model 2
+
+```{r}
+mod2 <- 
+  lm(lnyears ~ primlev_m + primlev2 + seclev_m + seclev2 + nsecond_m + priorlev_m + priorlev2 + nprior_m + black_m, 
+     data = sentence)
+
+mod2 |> tidy()
+mod2 |> glance() |> select(r.squared, sigma)
+```
+
+From this model looking the impact of race it was found that there was not enough evidence to reject the null hypothesis that there is no difference in sentence length by race. We know this by looking at the R^2 values from both models (mod1 = .576; mod2 = .577) telling us that there was no difference in the variability in Y explained by X. In summary, the race of the offender didn't create a significant amount of variance in sentence length compared to effects of seriousness and number of offenses. 
+
+## Model 3
+
+```{r}
+mod3 <- 
+  lm(lnyears ~ primlev_m + primlev2 + seclev_m + seclev2 + nsecond_m + priorlev_m + priorlev2 + nprior_m + black_m + afro_m, 
+     data = sentence)
+
+mod3 |> tidy()
+mod3 |> glance() |> select(r.squared, sigma)
+```
+
+In this third model it was shown that afrocentric features significantly predicted sentence length (even with accounting for criminal history and race).The data shows that as we see the R^2 value is 0.588 when adding the afrocentric features. Comparing that to model 2's R^2 we see an increase of 0.11 meaning that there is a greater amount of variability determined by the X variables. We also see that the t statistic here is in the rejection region (t>1.97) so we can reject the null hypothesis that there's no evidence that afrocentric features is related to sentence length in ln(years). 
+ 
+
+## Model 4
+
+```{r}
+mod4 <- 
+  lm(lnyears ~ primlev_m + primlev2 + seclev_m + seclev2 + nsecond_m + priorlev_m + priorlev2 + nprior_m + black_m*afro_m, 
+     data = sentence)
+
+mod4 |> tidy()
+mod4 |> glance() |> select(r.squared, sigma)
+```
+
+What was found in this model was that both black and white inmates that had more afrocentric features were given a longer sentence. The data backs that up as the t-statistic didn't 'land' in the rejection region so we can reject the null and state that there wasn't enough evidence that there were different slopes. 
+
+## Model 5
+
+```{r}
+mod5 <- 
+  lm(lnyears ~ primlev_m + primlev2 + seclev_m + seclev2 + nsecond_m + priorlev_m + priorlev2 + nprior_m + black_m + afro_m + babyface_m, 
+     data = sentence)
+
+mod5 |> tidy()
+mod5 |> glance() |> select(r.squared, sigma)
+```
+
+In this model the conclusion found was that the alternative variables (attractiveness and babyish features) don't explain the effect of afrocentric features (the effect was still there even after accounting for attractiveness and babyish features). The data showed that as the t-statistics for the 2 alternative variables weren't in the rejection region allowing us to state that there was no evidence that those were related to sentence length when holding all other variables constant. 
+
+## A dot and whisker plot of Model 3
+
+```{r}
+sjPlot::plot_model(mod3, ci.lvl = .95, show.values = TRUE, show.p = FALSE, 
+            axis.title = "Regression estimates and 95% confidence intervals",
+            title = "Regression estimates for prediction of log sentence length in Model 3") 
+```
+
+## A table of Models 1 and 3
+
+```{r}
+t1 <- mod1 |> tbl_regression(intercept = TRUE) |> 
+  modify_header(update = list(label ~ "**Term**", estimate ~ "**Estimate**")) 
+
+t3 <- mod3 |> tbl_regression(intercept = TRUE) |> 
+  modify_header(update = list(label ~ "**Term**", estimate ~ "**Estimate**")) 
+
+tbl_merge(tbls = list(t1, t3),
+          tab_spanner = c("**Model 1**", "**Model 3**")) |> 
+  modify_caption("**Table 2. Regression estimates and 95% confidence intervals for Models 1 and 3**")
+```
+
+## A figure of the fitted model
+
+```{r}
+# create residual for lnyears
+r.lnyears <- 
+  lm(lnyears ~ primlev_m + primlev2 + seclev_m + seclev2 + nsecond_m + priorlev_m + priorlev2 + nprior_m, data = sentence) |> 
+  augment(data = sentence) |> 
+  select(id, .resid) |> 
+  rename(resid.lnyears = .resid) 
+
+# create residual for afrocentric features
+r.afro <- 
+  lm(afro_m ~ primlev_m + primlev2 + seclev_m + seclev2 + nsecond_m + priorlev_m + priorlev2 + nprior_m, data = sentence) |> 
+  augment(data = sentence) |> 
+  select(id, .resid) |> 
+  rename(resid.afro = .resid) 
+
+# merge residuals together
+plot_df <- sentence |> 
+  left_join(r.lnyears, by = "id") |> 
+  left_join(r.afro, by = "id") |> 
+  mutate(black.f = factor(black_m, levels = c(-1, 1), labels = c("White", "Black")))
+
+# get hex codes for chosen palette
+# RColorBrewer::brewer.pal(3, "Dark2")
+
+# create plot
+plot_df |> 
+  ggplot(aes(x = resid.afro, y = resid.lnyears)) +
+  geom_point(aes(color = black.f)) +
+  geom_hline(yintercept = -.044*-1, color = "#1B9E77", linetype = "dashed") + # line for whites in model 2
+  geom_hline(yintercept = -.044*1, color = "#D95F02", linetype = "dashed") + # line for blacks in model 2
+  geom_abline(intercept = -.161*-1, slope = .092, color = "#1B9E77") + # line for whites in model 3
+  geom_abline(intercept = -.161*1, slope = .092, color = "#D95F02") + # line for blacks in model 3
+  theme_bw() +
+  theme(plot.caption = element_text(hjust = 0)) + 
+  labs(title = "Figure 2: Model fitted results for Models 2 and 3",
+       x = "Afrocentric features residual", y = "Total prison time residual",
+       color = "Race",
+       caption = "Residualized sentence length and residualized Afrocentric features for Black (in orange) and White (in green) inmates. \nDashed lines denote difference in sentence length between Black and White inmates. \nSolid lines denote fitted regression line for effect of Afrocentric features on sentence length from Model 3.") +
+  scale_color_brewer(palette = "Dark2")
+```
+
+#optional graphs
+```{r}
+pred_grid <- 
+  sentence |> 
+  group_by(black_m) |> 
+  modelr::data_grid(.model = mod3, 
+            afro_m = modelr::seq_range(afro_m, 10),
+            primlev_m = 0, primlev2 = 0, 
+            seclev_m = 0, seclev2 = 0, nsecond_m = 0, 
+            priorlev_m = 0, priorlev2 = 0, nprior_m = 0) |> 
+  ungroup() |> 
+  mutate(black.f = factor(black_m, levels = c(-1, 1), labels = c("White", "Black"))) |> 
+  modelr::add_predictions(mod3) |> 
+  rename(lnyears_hat = pred)
+```
+
+```{r}
+pred_grid |> 
+  ggplot(aes(x = afro_m, y = lnyears_hat, group = black.f, color = black.f)) +
+  geom_line() +
+  theme_bw() +
+  labs(title = "Predicted log sentence length by Afrocentric features \nfor White and Black inmates",
+       subtitle = "All criminal record variables are held at the mean in the sample",
+       color = "Race",
+       x = "Afrocentric features (centered at the mean)",
+       y = "Predicted sentence length in ln(years)")
+```
+
+```{r}
+pred_grid |> 
+  mutate(years_hat = exp(lnyears_hat)) |> 
+  mutate(months_hat = years_hat*12) |> 
+  ggplot(aes(x = afro_m, months_hat, group = black.f, color = black.f)) +
+  geom_line() +
+  theme_bw() +
+  scale_y_continuous(breaks = seq(0, 48, 2)) +
+  scale_x_continuous(breaks = seq(-3, 3, 1)) +
+  labs(title = "Predicted sentence length by Afrocentric features for \nWhite and Black inmates",
+       subtitle = "All criminal record variables are held at the mean in the sample",
+       color = "Race",
+       x = "Afrocentric features (centered at the mean)",
+       y = "Predicted sentence length in months")
+```
+ 
